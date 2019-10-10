@@ -1,4 +1,19 @@
-﻿License:
+# PercEvite # 
+This repository contains the software for the modules of PercEvite.
+- Drone_code: python software to run on the Raspberry Pi 3
+- esp8266_firmware is the firmware to be uploaded on the ESP8266 wifi module
+- ESP32_firmware: last version of the firmware for ESP32_firmware
+- Papers: Preprint of papers published in the context of PercEvite
+- BroadcastSimulator: a Java simulator of the SSID Broadcast/Scan protocol
+
+## Dependencies ##
+1) Dronekit
+2) PySerial
+3) numpy
+4) PyRTLSDR for angle of arrival
+
+# Code License #
+License:
 © Copyright 2018, Networked Systems group, ESAT-TELEMIC,KU Leuven.
 All rights reserved.
 
@@ -27,4 +42,4 @@ OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
 OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
+THE POSSIBILITY OF SUCH DAMAGE. 
