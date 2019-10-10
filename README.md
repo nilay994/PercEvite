@@ -5,6 +5,7 @@ This repository contains the software for the modules of PercEvite.
 - ESP32_firmware: last version of the firmware for ESP32_firmware
 - Papers: Preprint of papers published in the context of PercEvite
 - BroadcastSimulator: a Java simulator of the SSID Broadcast/Scan protocol
+- PEPB.zip: Schematic and layout (Altium Designer) of the power board used on the drones to convert 12V to 5V
 
 ## Dependencies ##
 1) Dronekit
