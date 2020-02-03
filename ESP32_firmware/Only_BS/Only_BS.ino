@@ -1,10 +1,13 @@
 #include <WiFi.h>
 #include "esp_wifi.h"
 
+#include "wsled.h"
+
 
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
 uint8_t channel = 0;
+#define DEVCHAR '1'
 
 int r;
 
@@ -35,10 +38,10 @@ uint8_t packet[] = { 0x80, 0x00, 0x00, 0x00,
                      /*34*/0x01, 0x04,/*Capability info*/
                      /* SSID=ELEMENT ID> length> 28 bytes*/
                      /*36*/0x00, 30,
-                     /*38*/'D', '1', 'E', 'S',
+                     /*38*/'(', DEVCHAR, 'E', 'S',
                      /*42*/'P', '-', 'M', 'A',
                      /*46*/'V', 'L', 'A', 'B',
-                     /*50*/'*', '*', '*', '*',
+                     /*50*/DEVCHAR, '*', '*', '*',
                      /*54*/'*', '*', '*', '*',
                      /*58*/'*', '*', '*', '*',
                      /*62*/'*', '*', '*', '*',
@@ -52,103 +55,130 @@ uint8_t packet[] = { 0x80, 0x00, 0x00, 0x00,
 
 void random_mac()
 {
-    // Randomize SRC MAC
-    packet[10] = packet[16] = random(256);
-    packet[11] = packet[17] = random(256);
-    packet[12] = packet[18] = random(256);
-    packet[13] = packet[19] = random(256);
-    packet[14] = packet[20] = random(256);
-    packet[15] = packet[21] = random(256);
+  // Randomize SRC MAC
+  packet[10] = packet[16] = random(256);
+  packet[11] = packet[17] = random(256);
+  packet[12] = packet[18] = random(256);
+  packet[13] = packet[19] = random(256);
+  packet[14] = packet[20] = random(256);
+  packet[15] = packet[21] = random(256);
 }
 
 
 void scan(uint8_t ch, uint8_t Ts)
 {
-    int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
+  int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
 
-    for (int j = 0; j < numSsid; j++) {
-        String ssid = WiFi.SSID(j);
-        if (ssid.startsWith("DN")) {
-            Serial.print(ssid + "\t");
-            Serial.print("rssi:");
-            Serial.println(WiFi.RSSI(j));
-
-        }
-
+  for (int j = 0; j < numSsid; j++) {
+    String ssid = WiFi.SSID(j);
+    if (ssid.startsWith("(")) {
+      Serial.println(ssid);
     }
+
+  }
 }
 
 void broadcastSSID()
 {
+  random_mac();
 
-    //digitalWrite(21, HIGH);
-    random_mac();
+  for (int c = 1; c < 15; c++) {
 
-    for (int c = 1; c < 15; c++) {
+    packet[80] = c;
+    esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_80211_tx(WIFI_IF_AP, packet, 81, false);
 
-        packet[80] = c;
-        esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
-        esp_wifi_80211_tx(WIFI_IF_AP, packet, 81, false);
-
-        delay(1);
-    }//14 channels
-    delay(8);
-    //digitalWrite(21, LOW);
+    delay(1);
+  }//14 channels
+  delay(8);
 }
 
 void setup()
 {
-    Serial.begin(115200);
-    Serial.setTimeout(100);
-    WiFi.mode(WIFI_AP_STA);
+  Serial.begin(115200);
+  Serial.setTimeout(100);
+  WiFi.mode(WIFI_AP_STA);
 
-    //Set channel
-    channel = random(1, 14);
-    esp_wifi_set_promiscuous(true);
-    esp_wifi_set_max_tx_power(78);
+  //Set channel
+  channel = random(1, 14);
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_max_tx_power(78);
 
-    //Select external antenna
-    pinMode(21, OUTPUT);
-    digitalWrite(21, HIGH);
+  
 
+  //Select external antenna
+  pinMode(21, OUTPUT);
+  digitalWrite(21, HIGH);
+
+  // Init RGB LED
+  FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(32);
+  leds[0] = CRGB::Black;
+  FastLED.show();
+
+  delay(1000);
+
+  Serial.println("DEVICE: " + DEVCHAR);
 }
 
-// Doesn't work yet: STA needs to connect to AP to get SSID. You are an STA broadcasting SSID directly in the MAC frame.
-// wifi_config_t curr_wifi_config;
-//// esp_wifi_get_config(wifi_interface_t interface, wifi_config_t *conf);
-//        if (esp_wifi_get_config(ESP_IF_WIFI_STA, &curr_wifi_config) == ESP_OK) {
-//          Serial.print("currentSSID: ");
-//          // uint8_t curr_ssid[32];
-//          // String curr_ssid = curr_wifi_config.sta.ssid;
-//          // Serial.print(sizeof(curr_wifi_config.sta.ssid));
-//          // for (int i = 0; i < sizeof(curr_wifi_config.sta.ssid); i++) {
-//            Serial.println(WiFi.SSID());
-//          //}
-//        }
+
+int ctr = 0;
+
+void onesecondloop() {
+  unsigned long curr_time = millis();
+  static unsigned long prev_time = curr_time;
+  if ((curr_time - prev_time) > 1000) {
+    ctr = ctr + 1;
+    prev_time = curr_time;
+    // toggle every second
+    if (ctr % 2 == 0) {
+      if (DEVCHAR == '2') {
+        leds[0] = CRGB::Red;
+      }
+      if (DEVCHAR == '1') {
+        leds[0] = CRGB::Green;
+      }
+    }
+    else {
+      leds[0] = CRGB::Black;
+    }
+    FastLED.show();
+  }
+}
 
 
 void loop()
 {
-    r = random(0, 9999);
-    //50Tx,50Rx
-    if (r < 6667) { 
+  onesecondloop();
+  r = random(0, 9999);
 
-        // //digitalWrite(15, HIGH);
-        // Serial.println('>'); //Used to synchronize UART communication
-        // Serial.write(17);//XON
-        // int b = Serial.readBytesUntil('*', &packet[39], 26);
-        // Serial.write(19);//XOFF
-        broadcastSSID();//B
+  // three digit alive packet, 4th as terminator
+  char eta[4] = {'0'};
 
-    } else {
-        unsigned long start = micros();
-        Serial.println('S');
-        scan(channel, 60); //S
-        unsigned long stop = micros();
-        Serial.printf("s-dur: %u\r\n", stop - start);
-    }
+  //50Tx,50Rx
+  if (r < 6667) {
 
+    // //digitalWrite(15, HIGH);
+    // Serial.println('>'); //hotUsed to synchronize UART communication
+    // Serial.write(17);//XON
 
+    // alive packet
+    sprintf(eta, "%03d", ctr);
+    // Serial.println(eta);
+    packet[47] = eta[0];
+    packet[48] = eta[1];
+    packet[49] = eta[2];
 
+    int b = Serial.readBytesUntil('*', &packet[40], 26);
+    // Serial.write(19);//XOFF
+    broadcastSSID();//B
+
+  } else {
+    unsigned long start = micros();
+    //Serial.println('S');
+    scan(channel, 60); //S
+    unsigned long stop = micros();
+    //Serial.printf("s-dur: %u\r\n", stop - start);
+  }
 
 }
