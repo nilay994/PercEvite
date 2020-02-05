@@ -1,5 +1,5 @@
 #define ESP_MAX_LEN 50
-#define DEVCHAR '1'
+#define DEVCHAR '0'
 
 
 // generic JEVOIS message structure

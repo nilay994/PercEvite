@@ -93,7 +93,7 @@ void onesecondloop() {
 
     // toggle every second
     if (ctr % 2 == 0) {
-        if (prev_esp_state != curr_esp_state) {
+        if (curr_esp_state != prev_esp_state) {
           leds[0] = CRGB::Red;
         } else {
           leds[0] = CRGB::Green;
