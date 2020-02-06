@@ -1,5 +1,5 @@
 #define ESP_MAX_LEN 50
-#define DEVCHAR '0'
+#define DEVCHAR '1'
 
 
 // generic JEVOIS message structure
@@ -13,6 +13,7 @@ struct esp_msg_t {
 enum esp_state {
   ESP_SYNC = 0,
   ESP_ID,
+  ESP_OK_CHECK,
   ESP_RX_MSG,
   ESP_RX_OK,
   ESP_RX_ERR

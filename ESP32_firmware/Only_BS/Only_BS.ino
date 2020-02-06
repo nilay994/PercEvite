@@ -3,6 +3,8 @@
 #include "Only_BS.h"
 #include "wsled.h"
 
+// #define DEBUG
+
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
 uint8_t channel = 0;
@@ -71,7 +73,7 @@ void setup()
   // Init RGB LED
   FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(32);
-  leds[0] = CRGB::Black;
+  leds[0] = CRGB::Green;
   FastLED.show();
   
   delay(1000);
@@ -90,20 +92,6 @@ void onesecondloop() {
    
   if ((curr_time - prev_time) > 1000) {
     ctr = ctr + 1;
-
-    // toggle every second
-    if (ctr % 2 == 0) {
-        if (curr_esp_state != prev_esp_state) {
-          leds[0] = CRGB::Red;
-        } else {
-          leds[0] = CRGB::Green;
-        }
-        
-    } else {
-        leds[0] = CRGB::Black;
-    }
-    
-    FastLED.show();
     
     prev_esp_state = curr_esp_state;
     prev_time = curr_time;
@@ -131,29 +119,59 @@ void parse_bytes(char c) {
    *  |------------|-------------------------|-------------------|
    *  | $          | numbers                 | CR/LN/*           |
    */
+
   
+  static uint8_t byte_ctr = 0;
   // NOTE: CR and LF are two seperate chars
   
   switch (esp.state) {
     case ESP_SYNC: {
       /* first char, sync string */
       if (c == '$') {
-        esp.state = ESP_RX_MSG;
+        esp.state = ESP_OK_CHECK;
+      }
+    } break;
+    case ESP_OK_CHECK: {
+        /* check for OK string */
+        if ((c == 'O') && (byte_ctr == 0)) {
+          byte_ctr = byte_ctr + 1;
+          break;
+        } else if ((c == 'K') && (byte_ctr == 1)) {
+          static bool toggle = 0; 
+          if (toggle) {  
+            // blink red led
+            leds[0] = CRGB::Red;
+            FastLED.show();
+          } else {
+            leds[0] = CRGB::Green;
+            FastLED.show();
+          }
+          char tmp_str[80] = {0};
+          #ifdef DEBUG
+            /* string is okay, print it out and reset the state machine */
+            sprintf(tmp_str, "esp.state: %d, OKAY received\n", esp.state);
+            Serial.print(tmp_str);
+          #endif
+          toggle = !toggle;
+          byte_ctr = 0;
+          esp.state = ESP_SYNC;
+        } else {
+          byte_ctr = 0;
+          esp.state = ESP_RX_MSG;
       }
     } break;
     case ESP_RX_MSG: {  
-      /* not misra complaint to declare in case, but local-var */
-      static uint8_t byte_ctr = 0;
       
       /* if received terminate before string complete (atleast 3 bytes), trigger ERROR */
-      if ((c=='\0' || c=='\n' || c=='\r' || c=='*') && (byte_ctr < 3)) {
+      if (((c < 48) || (c > 57)) && (c!='.') && (c!= '-') && (byte_ctr < 10)) {
+        byte_ctr = 0;
         esp.state = ESP_RX_ERR;
       }
       
       /* after receiving the msg, terminate ssid string */
-      if ((c=='\0' || c=='\n' || c=='\r' || c=='*') && (byte_ctr >= 3)) {
+      if ((c=='\0' || c=='\n' || c=='\r' || c=='*') && (byte_ctr >= 10)) {
         // TODO: no need to terminate ssid
-        esp.msg.str[byte_ctr] = '\0';
+        // esp.msg.str[byte_ctr] = '\0';
         byte_ctr = 0;
         /* received message, now switch state machine */
         esp.state = ESP_RX_OK; 
