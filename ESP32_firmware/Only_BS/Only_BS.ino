@@ -9,9 +9,6 @@
 
 drone_data_t dr_data[MAX_DRONES];
 uint8_t esp_state = ESP_SYNC;
-
-
-
 uint8_t channel = 0;
 
 void random_mac()
@@ -58,6 +55,68 @@ void broadcastSSID()
   delay(8);
 }
 
+// tx: finally send a hex array to esp32
+static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
+
+  // augment start bytes
+  Serial.write('$');
+  Serial.write(178);
+
+  uint8_t checksum = 0;
+
+  // maximum of 255 bytes
+  uint8_t i = 0;
+  for (i = 0; i < len; i ++) {
+    Serial.write(s[i]);
+    
+    // TODO: remove when full checksum
+    if (i > 2) {
+      checksum += s[i];
+    }
+  }
+  #ifdef DBG
+  char tmpstr[30] = {0};
+  sprintf(tmpstr, "appended checksum while bbp tx: 0x%02x\n", checksum);
+  Serial.print(tmpstr);
+  #endif 
+  
+  Serial.write(checksum);
+
+  return (i+3);
+}
+
+
+// tx: send struct to esp32
+static void tx_struct(uart_packet_t *uart_packet) {
+
+  uint8_t tx_string[ESP_MAX_LEN] = {0};
+
+  //uart_packet_t = drone_info_t + drone_data_t;
+
+  // copy packed struct into a string
+  memcpy(tx_string, uart_packet, sizeof(uart_packet_t));
+
+  #ifdef DBG
+  char tmpstr[100] = {0};
+  int idx = sprintf(tmpstr, "ssid should be:\n");
+  for (int i = 0; i < sizeof(uart_packet_t); i++) {
+    idx= sprintf(&tmpstr[idx], "0x%02x,", tx_string[i]);
+  }
+  sprintf(&tmpstr[idx], "\n*******\n");
+  Serial.write(tmpstr);
+  #endif
+
+  // send "stringed" struct
+  esp_send_string(tx_string, sizeof(uart_packet_t));
+  
+}
+
+
+
+
+
+
+
 // init: clear all data for all drones
 static void clear_drone_status(void) {
   for (uint8_t id = 0; id < MAX_DRONES; id++) {
@@ -98,40 +157,47 @@ void setup()
   FastLED.show();
 
   clear_drone_status();
-  delay(1000);
+  delay(1000);  
 
   // Serial.println("DEVICE: " + DEVCHAR);
 }
 
-// invoked every second
+// invoked every 2 seconds
 int ctr = 0;
 void onesecondloop() {
-//  unsigned long curr_time = millis();
-//  static unsigned long prev_time = curr_time;
-//  
-//  esp_state curr_esp_state = esp_state;
-//  static esp_state prev_esp_state = curr_esp_state;
-//   
-//  if ((curr_time - prev_time) > 1000) {
-//    ctr = ctr + 1;
-//    
-//    prev_esp_state = curr_esp_state;
-//    prev_time = curr_time;
-//    
-//    // Serial print current ssid every second
-//    #ifdef DEBUG
-//        // Used to synchronize UART communication
-//        // Serial.println('>'); 
-//        // Serial.write(17);//XON
-//        for (int i = 38; i < 68; i++) {
-//          Serial.print((char)packet[i]);
-//        }
-//        Serial.println("EOF");
-//        // Serial.write(19);//XOFF
-//    #endif
-//    
-//
-//  }
+
+  
+  uart_packet_t uart_packet = {
+    .info = {
+      .drone_id = SELF_ID,
+      .packet_type = DATA_FRAME,
+      .packet_length = 2 + sizeof(uart_packet_t),
+    },
+    .data = {
+      .pos = {
+        .x = -1.53,
+        .y = -346.234,
+        .z = 23455.234,
+      },
+      .heading = -452.12,
+      .vel = {
+        .x = -1.53,
+        .y = -346.234,
+        .z = 23455.234,
+      },
+    },
+  };
+
+  
+  unsigned long curr_time = millis();
+  static unsigned long prev_time = curr_time;
+
+  if ((curr_time - prev_time) > 2000) {
+    ctr = ctr + 1;
+    tx_struct(&uart_packet);
+    
+    prev_time = curr_time;
+  }
 }
 
 // rx: print struct received after checksum match
