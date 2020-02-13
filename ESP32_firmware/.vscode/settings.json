@@ -1,0 +1,5 @@
+{
+    "arduino.path": "/home/nilay/develop/arduino-1.8.10-linux64/arduino-1.8.10",
+    "arduino.commandPath": "arduino",
+    "arduino.additionalUrls": "https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json",
+}

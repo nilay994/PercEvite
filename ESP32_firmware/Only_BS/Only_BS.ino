@@ -3,7 +3,7 @@
 #include "Only_BS.h"
 #include "wsled.h"
 
-#define DBG
+// #define DBG
 
 // esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
@@ -25,17 +25,20 @@ void random_mac()
 
 void scan(uint8_t ch, uint8_t Ts)
 {
-  // int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
-  int numSsid = 0;
+  int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
+  // int numSsid = 0;
   /* scan for other drone IDs */
   for (int j = 0; j < numSsid; j++) {
     // want to read all the 32B
     char ssidstr_tmp[32] = {0}; 
     uint8_t ssidstr[32] = {0};
-    
+
+    // MAJOR BUG! suspecting wifi.ssid terminating string @ 0x00
+    // switch to a promiscuous mode!! 
     WiFi.SSID(j).toCharArray(ssidstr_tmp, 32);
     
     memcpy(ssidstr, ssidstr_tmp, 32);
+
     /* print other drones location but with $ appended and CR/LN at the end of packet */
     if (ssidstr[0] == '$') {
       
