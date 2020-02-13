@@ -3,7 +3,7 @@
 #include "Only_BS.h"
 #include "wsled.h"
 
-//#define DBG
+#define DBG
 
 // esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
@@ -29,27 +29,38 @@ void scan(uint8_t ch, uint8_t Ts)
   int numSsid = 0;
   /* scan for other drone IDs */
   for (int j = 0; j < numSsid; j++) {
-    String ssid = WiFi.SSID(j);
+    // want to read all the 32B
+    char ssidstr_tmp[32] = {0}; 
+    uint8_t ssidstr[32] = {0};
+    
+    WiFi.SSID(j).toCharArray(ssidstr_tmp, 32);
+    
+    memcpy(ssidstr, ssidstr_tmp, 32);
     /* print other drones location but with $ appended and CR/LN at the end of packet */
-    if (ssid.startsWith("$D")) {
+    if (ssidstr[0] == '$') {
       
       /* UART: esp2pprz
        *  | Start Byte | Drone State (6*4) Bytes | End Byte (1 Byte) |
        *  |------------|-------------------------|-------------------|
        *  | $          | numbers                 | CR/LN             |
        */
-      Serial.println('$' + ssid.substring(2));
+      // Serial.println('$' + ssid.substring(2));
+      
+      // uint8_t tx_string[3+28] = {0};
+      // tx_string = ssid.substring(1);
+      esp_send_string(&ssidstr[1], sizeof(uart_packet_t));
     }
   }
 }
 
-void broadcastSSID()
-{
+// make this my ssid, can only be 32B long
+void broadcastSSID() {
+  // fixed header "$"
   random_mac();
   for (int c = 1; c < 15; c++) {
-    packet[80] = c;
+    packet[80] = c;    
     esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_80211_tx(WIFI_IF_AP, packet, 81, false);
+    esp_wifi_80211_tx(WIFI_IF_AP, packet, LEN_802_11, false);
     delay(1);
   } //14 channels
   delay(8);
@@ -112,11 +123,6 @@ static void tx_struct(uart_packet_t *uart_packet) {
 }
 
 
-
-
-
-
-
 // init: clear all data for all drones
 static void clear_drone_status(void) {
   for (uint8_t id = 0; id < MAX_DRONES; id++) {
@@ -132,8 +138,7 @@ static void clear_drone_status(void) {
 }
 
 
-void setup()
-{
+void setup() {
   // reset uart state machine 
   esp_state = ESP_SYNC;
   
@@ -166,7 +171,6 @@ void setup()
 int ctr = 0;
 void onesecondloop() {
 
-  
   uart_packet_t uart_packet = {
     .info = {
       .drone_id = SELF_ID,
@@ -188,13 +192,13 @@ void onesecondloop() {
     },
   };
 
-  
   unsigned long curr_time = millis();
   static unsigned long prev_time = curr_time;
 
   if ((curr_time - prev_time) > 2000) {
     ctr = ctr + 1;
-    tx_struct(&uart_packet);
+    
+    // tx_struct(&uart_packet);
     
     prev_time = curr_time;
   }
@@ -213,7 +217,7 @@ static void print_drone_data_struct(drone_data_t *dat) {
 }
 
 
-// rx: receive drone_data in a string
+// rx: receive drone_data from struct to a string
 static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
 	memcpy(dr_dat, buf, sizeof(drone_data_t));
 	#ifdef DBG
@@ -230,9 +234,8 @@ static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
   FastLED.show(); 
 }
 
-
 // null terminated at the end is fine for memcpy
-uint8_t localbuf[ESP_MAX_LEN] = {0};
+uint8_t databuf[ESP_MAX_LEN] = {0};
 
 void esp_parse(uint8_t c) {
   
@@ -309,12 +312,11 @@ void esp_parse(uint8_t c) {
 
       if (byte_ctr < packet_length) {
         /* fill a localbuf and calculate local checksum */
-        localbuf[byte_ctr - st_byte_pos] = c;
+        databuf[byte_ctr - st_byte_pos] = c;
 
-        checksum += localbuf[byte_ctr - st_byte_pos];
+        checksum += databuf[byte_ctr - st_byte_pos];
         
         byte_ctr = byte_ctr + 1;
-        // printf("byte_ctr: %d, idx: %d\n", byte_ctr, byte_ctr - st_byte_pos);		
       }
 
       /* after receiving the msg, terminate ssid string */
@@ -338,12 +340,30 @@ void esp_parse(uint8_t c) {
     case ESP_RX_OK: {
       #ifdef DBG
       char tmstr1[50] = {0};
-      sprintf(tmstr1, "[uart] ESP_RX_OK\n");
-      Serial.println(tmstr1);
+      for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
+        sprintf(tmstr1, "[uart] ESP_RX_OK: 0x%02x\n", databuf[ct]);
+        Serial.println(tmstr1);
+      }
+      
       #endif
 
       /* checksum matches, proceed to populate the struct */
-      rx_struct(&dr_data[drone_id], localbuf);
+      rx_struct(&dr_data[drone_id], databuf);
+      drone_info_t info = {
+        .drone_id = drone_id,
+        .packet_type = packet_type,
+        .packet_length = packet_length,
+      };
+      uint8_t infobuf[3] = {0};
+      memcpy(&infobuf, &info, sizeof(drone_info_t));
+
+      // write into 802.11 packet ssid info
+      memcpy(&packet[39], &infobuf, sizeof(drone_info_t));
+      // write into 802.11 packet ssid data
+      memcpy(&packet[42], &databuf, sizeof(drone_data_t));
+      
+      // broadcastSSID();
+
       checksum = 0;
 
       /* reset state machine */
@@ -380,8 +400,7 @@ void esp_parse(uint8_t c) {
 
 
 
-void loop()
-{
+void loop() {
   onesecondloop();
 
   // send to state machine
