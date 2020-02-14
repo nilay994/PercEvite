@@ -22,11 +22,37 @@ void random_mac()
   packet[15] = packet[21] = random(256);
 }
 
+#define DEFAULT_SCAN_LIST_SIZE 10
+uint16_t number = DEFAULT_SCAN_LIST_SIZE;
+wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
+char ssidsdk[32] = {0};
+wifi_scan_config_t config;
 
 void scan(uint8_t ch, uint8_t Ts)
 {
+  // config.ssid = 0;
+  // config.bssid = 0;
+  // config.channel = ch;
+  // config.show_hidden = true;
+  // config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
+  // config.scan_time.passive = Ts;
+  
+  // uint16_t ap_count = 0;
+  // memset(ap_info, 0, sizeof(ap_info));
+  // ESP_ERROR_CHECK(esp_wifi_start());
+  // ESP_ERROR_CHECK(esp_wifi_scan_start(&config, true)); // Do make blocking calls
+  // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+  // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+
+  // for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
+      
+  //     memcpy(&ssidsdk, &ap_info[i].ssid, 32);
+  //     Serial.print("SSID: ");
+  //     Serial.println(ssidsdk); // suspecting typecasting problem here
+  // }
+
   int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
-  // int numSsid = 0;
+
   /* scan for other drone IDs */
   for (int j = 0; j < numSsid; j++) {
     // want to read all the 32B
@@ -139,7 +165,6 @@ static void clear_drone_status(void) {
     dr_data[id].vel.z = 0;
   }
 }
-
 
 void setup() {
   // reset uart state machine 
