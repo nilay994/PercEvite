@@ -30,53 +30,29 @@ wifi_scan_config_t config;
 
 void scan(uint8_t ch, uint8_t Ts)
 {
-  // config.ssid = 0;
-  // config.bssid = 0;
-  // config.channel = ch;
-  // config.show_hidden = true;
-  // config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
-  // config.scan_time.passive = Ts;
-  
-  // uint16_t ap_count = 0;
-  // memset(ap_info, 0, sizeof(ap_info));
-  // ESP_ERROR_CHECK(esp_wifi_start());
-  // ESP_ERROR_CHECK(esp_wifi_scan_start(&config, true)); // Do make blocking calls
-  // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-  // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-
-  // for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
-      
-  //     memcpy(&ssidsdk, &ap_info[i].ssid, 32);
-  //     Serial.print("SSID: ");
-  //     Serial.println(ssidsdk); // suspecting typecasting problem here
-  // }
-
   int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
 
   /* scan for other drone IDs */
   for (int j = 0; j < numSsid; j++) {
     // want to read all the 32B
-    char ssidstr_tmp[32] = {0}; 
     uint8_t ssidstr[32] = {0};
 
-    // MAJOR BUG! suspecting wifi.ssid terminating string @ 0x00
-    // switch to a promiscuous mode!! 
-    WiFi.SSID(j).toCharArray(ssidstr_tmp, 32);
+    // MAJOR BUG! suspecting wifi.ssid terminating when ssid char = 0x00
+    // Hacky patch @ .arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/WiFi/src
+    // switch to esp-idf please!! And force promiscuous mode!! 
+    // WiFi.SSID(j).toCharArray(ssidstr_tmp, 32);
     
-    memcpy(ssidstr, ssidstr_tmp, 32);
+    WiFi.SSID(j, ssidstr);
+    #ifdef DBG
+    Serial.print(j);
+    Serial.print("->");
+    for (int iwer = 0; iwer < 32; iwer ++) {
+      Serial.print(ssidstr[iwer], HEX);
+    }
+    #endif
 
     /* print other drones location but with $ appended and CR/LN at the end of packet */
     if (ssidstr[0] == '$') {
-      
-      /* UART: esp2pprz
-       *  | Start Byte | Drone State (6*4) Bytes | End Byte (1 Byte) |
-       *  |------------|-------------------------|-------------------|
-       *  | $          | numbers                 | CR/LN             |
-       */
-      // Serial.println('$' + ssid.substring(2));
-      
-      // uint8_t tx_string[3+28] = {0};
-      // tx_string = ssid.substring(1);
       esp_send_string(&ssidstr[1], sizeof(uart_packet_t));
     }
   }
@@ -125,33 +101,6 @@ static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
   return (i+3);
 }
 
-
-// tx: send struct to esp32
-static void tx_struct(uart_packet_t *uart_packet) {
-
-  uint8_t tx_string[ESP_MAX_LEN] = {0};
-
-  //uart_packet_t = drone_info_t + drone_data_t;
-
-  // copy packed struct into a string
-  memcpy(tx_string, uart_packet, sizeof(uart_packet_t));
-
-  #ifdef DBG
-  char tmpstr[100] = {0};
-  int idx = sprintf(tmpstr, "ssid should be:\n");
-  for (int i = 0; i < sizeof(uart_packet_t); i++) {
-    idx= sprintf(&tmpstr[idx], "0x%02x,", tx_string[i]);
-  }
-  sprintf(&tmpstr[idx], "\n*******\n");
-  Serial.write(tmpstr);
-  #endif
-
-  // send "stringed" struct
-  esp_send_string(tx_string, sizeof(uart_packet_t));
-  
-}
-
-
 // init: clear all data for all drones
 static void clear_drone_status(void) {
   for (uint8_t id = 0; id < MAX_DRONES; id++) {
@@ -195,43 +144,6 @@ void setup() {
   // Serial.println("DEVICE: " + DEVCHAR);
 }
 
-// invoked every 2 seconds
-int ctr = 0;
-void onesecondloop() {
-
-  uart_packet_t uart_packet = {
-    .info = {
-      .drone_id = SELF_ID,
-      .packet_type = DATA_FRAME,
-      .packet_length = 2 + sizeof(uart_packet_t),
-    },
-    .data = {
-      .pos = {
-        .x = -1.53,
-        .y = -346.234,
-        .z = 23455.234,
-      },
-      .heading = -452.12,
-      .vel = {
-        .x = -1.53,
-        .y = -346.234,
-        .z = 23455.234,
-      },
-    },
-  };
-
-  unsigned long curr_time = millis();
-  static unsigned long prev_time = curr_time;
-
-  if ((curr_time - prev_time) > 2000) {
-    ctr = ctr + 1;
-    
-    // tx_struct(&uart_packet);
-    
-    prev_time = curr_time;
-  }
-}
-
 // rx: print struct received after checksum match
 static void print_drone_data_struct(drone_data_t *dat) {
   char tmpstr[200] = {0};
@@ -262,9 +174,8 @@ static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
   FastLED.show(); 
 }
 
-// null terminated at the end is fine for memcpy
+// rx: parse data and switch state machines
 uint8_t databuf[ESP_MAX_LEN] = {0};
-
 void esp_parse(uint8_t c) {
   
   static uint8_t byte_ctr = 0;
@@ -412,6 +323,7 @@ void esp_parse(uint8_t c) {
     } break;
     default: {
             byte_ctr = 0;
+            checksum = 0;
             esp_state = ESP_SYNC;
     } break;
   }
@@ -427,11 +339,46 @@ void esp_parse(uint8_t c) {
 }
 
 
+// invoked every 2 seconds
+static void rate_loop() {
+  static int ctr = 0;
+  uart_packet_t uart_packet = {
+    .info = {
+      .drone_id = SELF_ID,
+      .packet_type = DATA_FRAME,
+      .packet_length = 2 + sizeof(uart_packet_t),
+    },
+    .data = {
+      .pos = {
+        .x = -1.53,
+        .y = -346.234,
+        .z = 23455.234,
+      },
+      .heading = -452.12,
+      .vel = {
+        .x = -1.53,
+        .y = -346.234,
+        .z = 23455.234,
+      },
+    },
+  };
+
+  unsigned long curr_time = millis();
+  static unsigned long prev_time = curr_time;
+
+  if ((curr_time - prev_time) > 2000) {
+    ctr = ctr + 1;
+    // For testing only
+    // tx_struct(&uart_packet);
+    prev_time = curr_time;
+  }
+}
+
 
 void loop() {
-  onesecondloop();
+  rate_loop();
 
-  // send to state machine
+  // rx: state machine
   if (Serial.available() > 0) {
     char incomingByte = Serial.read();
     esp_parse((uint8_t) incomingByte);
@@ -447,3 +394,51 @@ void loop() {
     scan(channel, 60); //S
   }
 }
+
+
+// tx: send struct to esp32
+static void tx_struct(uart_packet_t *uart_packet) {
+
+  uint8_t tx_string[ESP_MAX_LEN] = {0};
+
+  //uart_packet_t = drone_info_t + drone_data_t;
+
+  // copy packed struct into a string
+  memcpy(tx_string, uart_packet, sizeof(uart_packet_t));
+
+  #ifdef DBG
+  char tmpstr[100] = {0};
+  int idx = sprintf(tmpstr, "ssid should be:\n");
+  for (int i = 0; i < sizeof(uart_packet_t); i++) {
+    idx= sprintf(&tmpstr[idx], "0x%02x,", tx_string[i]);
+  }
+  sprintf(&tmpstr[idx], "\n*******\n");
+  Serial.write(tmpstr);
+  #endif
+
+  // send "stringed" struct
+  esp_send_string(tx_string, sizeof(uart_packet_t));
+  
+}
+
+
+// config.ssid = 0;
+// config.bssid = 0;
+// config.channel = ch;
+// config.show_hidden = true;
+// config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
+// config.scan_time.passive = Ts;
+
+// uint16_t ap_count = 0;
+// memset(ap_info, 0, sizeof(ap_info));
+// ESP_ERROR_CHECK(esp_wifi_start());
+// ESP_ERROR_CHECK(esp_wifi_scan_start(&config, true)); // Do make blocking calls
+// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+
+// for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
+    
+//     memcpy(&ssidsdk, &ap_info[i].ssid, 32);
+//     Serial.print("SSID: ");
+//     Serial.println(ssidsdk); // suspecting typecasting problem here
+// }
