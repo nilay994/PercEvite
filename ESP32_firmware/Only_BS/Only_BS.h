@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define SELF_ID 4
+#define SELF_ID 3
 #define ESP_MAX_LEN 50 // lat,long,alt,bearing = 51 bytes max (28 currently)
 #define MAX_DRONES 5  // maximum drones in ESP32's range
 #define LEN_802_11 83

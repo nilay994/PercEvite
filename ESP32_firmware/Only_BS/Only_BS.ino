@@ -37,10 +37,10 @@ void scan(uint8_t ch, uint8_t Ts)
     // want to read all the 32B
     uint8_t ssidstr[32] = {0};
 
-    // MAJOR BUG! suspecting wifi.ssid terminating when ssid char = 0x00
-    // Hacky patch @ .arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/WiFi/src
+    // these are making blocking calls mostly?!
+    // BUG! suspecting wifi.ssid terminating when ssid char = 0x00
+    // Hacky patch applied @ .arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/WiFi/src
     // switch to esp-idf please!! And force promiscuous mode!! 
-    // WiFi.SSID(j).toCharArray(ssidstr_tmp, 32);
     
     WiFi.SSID(j, ssidstr);
     #ifdef DBG
@@ -156,10 +156,17 @@ static void print_drone_data_struct(drone_data_t *dat) {
   Serial.println(tmpstr);
 }
 
+/* absolutely needed for now, TODO: maybe software flow control instead?! */
+void serial_flush(){
+  while(Serial.available() > 0) {
+    char t = Serial.read();
+  }
+}
 
-// rx: receive drone_data from struct to a string
+// rx: receive drone_data from string 
 static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
 	memcpy(dr_dat, buf, sizeof(drone_data_t));
+  serial_flush();
 	#ifdef DBG
 	print_drone_data_struct(dr_dat);
   #endif
@@ -278,12 +285,11 @@ void esp_parse(uint8_t c) {
 
     case ESP_RX_OK: {
       #ifdef DBG
-      char tmstr1[50] = {0};
-      for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
-        sprintf(tmstr1, "[uart] ESP_RX_OK: 0x%02x\n", databuf[ct]);
-        Serial.println(tmstr1);
-      }
-      
+      // char tmstr1[50] = {0};
+      // for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
+      //   sprintf(tmstr1, "[uart] ESP_RX_OK: 0x%02x\n", databuf[ct]);
+      //   Serial.println(tmstr1);
+      // }      
       #endif
 
       /* checksum matches, proceed to populate the struct */
@@ -315,13 +321,14 @@ void esp_parse(uint8_t c) {
             sprintf(tmstr2, "[uart] ESP_RX_ERR\n");
             Serial.println(tmstr2);
             #endif 
-            
+            serial_flush();
             byte_ctr = 0;
             checksum = 0;
             /* reset state machine, string terminated earlier than expected */
             esp_state = ESP_SYNC;
     } break;
     default: {
+            serial_flush();
             byte_ctr = 0;
             checksum = 0;
             esp_state = ESP_SYNC;
@@ -342,26 +349,6 @@ void esp_parse(uint8_t c) {
 // invoked every 2 seconds
 static void rate_loop() {
   static int ctr = 0;
-  uart_packet_t uart_packet = {
-    .info = {
-      .drone_id = SELF_ID,
-      .packet_type = DATA_FRAME,
-      .packet_length = 2 + sizeof(uart_packet_t),
-    },
-    .data = {
-      .pos = {
-        .x = -1.53,
-        .y = -346.234,
-        .z = 23455.234,
-      },
-      .heading = -452.12,
-      .vel = {
-        .x = -1.53,
-        .y = -346.234,
-        .z = 23455.234,
-      },
-    },
-  };
 
   unsigned long curr_time = millis();
   static unsigned long prev_time = curr_time;
@@ -396,7 +383,7 @@ void loop() {
 }
 
 
-// tx: send struct to esp32
+// tx: send struct to bebop
 static void tx_struct(uart_packet_t *uart_packet) {
 
   uint8_t tx_string[ESP_MAX_LEN] = {0};
