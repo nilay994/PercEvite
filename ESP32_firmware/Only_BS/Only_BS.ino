@@ -5,14 +5,18 @@
 
 // #define DBG
 
-// esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
-
 drone_data_t dr_data[MAX_DRONES];
 uint8_t esp_state = ESP_SYNC;
 uint8_t channel = 0;
 
-void random_mac()
-{
+// scan the 10 (strongest) access points
+#define DEFAULT_SCAN_LIST_SIZE 10
+uint16_t number = DEFAULT_SCAN_LIST_SIZE;
+wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
+char ssidsdk[32] = {0};
+wifi_scan_config_t config;
+
+void random_mac() {
   // Randomize SRC MAC
   packet[10] = packet[16] = random(256);
   packet[11] = packet[17] = random(256);
@@ -22,14 +26,7 @@ void random_mac()
   packet[15] = packet[21] = random(256);
 }
 
-#define DEFAULT_SCAN_LIST_SIZE 10
-uint16_t number = DEFAULT_SCAN_LIST_SIZE;
-wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
-char ssidsdk[32] = {0};
-wifi_scan_config_t config;
-
-void scan(uint8_t ch, uint8_t Ts)
-{
+void scan(uint8_t ch, uint8_t Ts) {
   int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
 
   /* scan for other drone IDs */
@@ -71,7 +68,7 @@ void broadcastSSID() {
   delay(8);
 }
 
-// tx: finally send a hex array to esp32
+// tx: send the ssid hex array to bebop after "$-ssid" was found in AP scan
 static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
 
   // augment start bytes
@@ -115,36 +112,7 @@ static void clear_drone_status(void) {
   }
 }
 
-void setup() {
-  // reset uart state machine 
-  esp_state = ESP_SYNC;
-  
-  Serial.begin(115200);
-  Serial.setTimeout(100);
-  WiFi.mode(WIFI_AP_STA);
-
-  // Set channel
-  channel = random(1, 14);
-  esp_wifi_set_promiscuous(true);
-  esp_wifi_set_max_tx_power(78);
-
-  // Select external antenna
-  pinMode(21, OUTPUT);
-  digitalWrite(21, HIGH);
-
-  // Init RGB LED
-  FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(32);
-  leds[0] = CRGB::Green;
-  FastLED.show();
-
-  clear_drone_status();
-  delay(1000);  
-
-  // Serial.println("DEVICE: " + DEVCHAR);
-}
-
-// rx: print struct received after checksum match
+// rx: in debug mode: print struct received after checksum match
 static void print_drone_data_struct(drone_data_t *dat) {
   char tmpstr[200] = {0};
 	sprintf(tmpstr, "dat->pos.x: %f, dat->pos.y: %f, dat->pos.z: %f\n"
@@ -157,13 +125,13 @@ static void print_drone_data_struct(drone_data_t *dat) {
 }
 
 /* absolutely needed for now, TODO: maybe software flow control instead?! */
-void serial_flush(){
+void serial_flush() {
   while(Serial.available() > 0) {
     char t = Serial.read();
   }
 }
 
-// rx: receive drone_data from string 
+// rx: receive drone_data struct from the string that was received from UART
 static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
 	memcpy(dr_dat, buf, sizeof(drone_data_t));
   serial_flush();
@@ -181,7 +149,7 @@ static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
   FastLED.show(); 
 }
 
-// rx: parse data and switch state machines
+// rx: parse UART bytes to from a packet by switching state machines
 uint8_t databuf[ESP_MAX_LEN] = {0};
 void esp_parse(uint8_t c) {
   
@@ -345,25 +313,36 @@ void esp_parse(uint8_t c) {
   prev_char = c;
 }
 
+void setup() {
+  // reset uart state machine 
+  esp_state = ESP_SYNC;
+  
+  Serial.begin(115200);
+  Serial.setTimeout(100);
+  WiFi.mode(WIFI_AP_STA);
 
-// invoked every 2 seconds
-static void rate_loop() {
-  static int ctr = 0;
+  // Set channel
+  channel = random(1, 14);
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_max_tx_power(78);
 
-  unsigned long curr_time = millis();
-  static unsigned long prev_time = curr_time;
+  // Select external antenna
+  pinMode(21, OUTPUT);
+  digitalWrite(21, HIGH);
 
-  if ((curr_time - prev_time) > 2000) {
-    ctr = ctr + 1;
-    // For testing only
-    // tx_struct(&uart_packet);
-    prev_time = curr_time;
-  }
+  // Init RGB LED
+  FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(32);
+  leds[0] = CRGB::Green;
+  FastLED.show();
+
+  clear_drone_status();
+  delay(1000);  
+
+  // Serial.println("DEVICE: " + DEVCHAR);
 }
 
-
 void loop() {
-  rate_loop();
 
   // rx: state machine
   if (Serial.available() > 0) {
@@ -381,51 +360,3 @@ void loop() {
     scan(channel, 60); //S
   }
 }
-
-
-// tx: send struct to bebop
-static void tx_struct(uart_packet_t *uart_packet) {
-
-  uint8_t tx_string[ESP_MAX_LEN] = {0};
-
-  //uart_packet_t = drone_info_t + drone_data_t;
-
-  // copy packed struct into a string
-  memcpy(tx_string, uart_packet, sizeof(uart_packet_t));
-
-  #ifdef DBG
-  char tmpstr[100] = {0};
-  int idx = sprintf(tmpstr, "ssid should be:\n");
-  for (int i = 0; i < sizeof(uart_packet_t); i++) {
-    idx= sprintf(&tmpstr[idx], "0x%02x,", tx_string[i]);
-  }
-  sprintf(&tmpstr[idx], "\n*******\n");
-  Serial.write(tmpstr);
-  #endif
-
-  // send "stringed" struct
-  esp_send_string(tx_string, sizeof(uart_packet_t));
-  
-}
-
-
-// config.ssid = 0;
-// config.bssid = 0;
-// config.channel = ch;
-// config.show_hidden = true;
-// config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
-// config.scan_time.passive = Ts;
-
-// uint16_t ap_count = 0;
-// memset(ap_info, 0, sizeof(ap_info));
-// ESP_ERROR_CHECK(esp_wifi_start());
-// ESP_ERROR_CHECK(esp_wifi_scan_start(&config, true)); // Do make blocking calls
-// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-
-// for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
-    
-//     memcpy(&ssidsdk, &ap_info[i].ssid, 32);
-//     Serial.print("SSID: ");
-//     Serial.println(ssidsdk); // suspecting typecasting problem here
-// }

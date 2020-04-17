@@ -1,0 +1,21 @@
+// esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
+// config.ssid = 0;
+// config.bssid = 0;
+// config.channel = ch;
+// config.show_hidden = true;
+// config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
+// config.scan_time.passive = Ts;
+
+// uint16_t ap_count = 0;
+// memset(ap_info, 0, sizeof(ap_info));
+// ESP_ERROR_CHECK(esp_wifi_start());
+// ESP_ERROR_CHECK(esp_wifi_scan_start(&config, true)); // Do make blocking calls
+// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+// ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+
+// for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
+    
+//     memcpy(&ssidsdk, &ap_info[i].ssid, 32);
+//     Serial.print("SSID: ");
+//     Serial.println(ssidsdk); // suspecting typecasting problem here
+// }

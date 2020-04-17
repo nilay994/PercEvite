@@ -1,0 +1,40 @@
+
+// invoked every 2 seconds
+static void rate_loop() {
+  static int ctr = 0;
+
+  unsigned long curr_time = millis();
+  static unsigned long prev_time = curr_time;
+
+  if ((curr_time - prev_time) > 2000) {
+    ctr = ctr + 1;
+    // For testing only
+    // tx_struct(&uart_packet);
+    prev_time = curr_time;
+  }
+}
+
+// tx: send struct to bebop
+static void tx_struct(uart_packet_t *uart_packet) {
+
+  uint8_t tx_string[ESP_MAX_LEN] = {0};
+
+  //uart_packet_t = drone_info_t + drone_data_t;
+
+  // copy packed struct into a string
+  memcpy(tx_string, uart_packet, sizeof(uart_packet_t));
+
+  #ifdef DBG
+  char tmpstr[100] = {0};
+  int idx = sprintf(tmpstr, "ssid should be:\n");
+  for (int i = 0; i < sizeof(uart_packet_t); i++) {
+    idx= sprintf(&tmpstr[idx], "0x%02x,", tx_string[i]);
+  }
+  sprintf(&tmpstr[idx], "\n*******\n");
+  Serial.write(tmpstr);
+  #endif
+
+  // send "stringed" struct
+  esp_send_string(tx_string, sizeof(uart_packet_t));
+  
+}
