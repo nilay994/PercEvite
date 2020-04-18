@@ -37,8 +37,8 @@ void scan(uint8_t ch, uint8_t Ts) {
     // these are making blocking calls mostly?!
     // BUG! suspecting wifi.ssid terminating when ssid char = 0x00
     // Hacky patch applied @ .arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/WiFi/src
-    // switch to esp-idf please!! And force promiscuous mode!! 
-    
+    // switch to esp-idf please!! And force promiscuous mode!!
+
     WiFi.SSID(j, ssidstr);
     #ifdef DBG
     Serial.print(j);
@@ -60,7 +60,7 @@ void broadcastSSID() {
   // fixed header "$"
   random_mac();
   for (int c = 1; c < 15; c++) {
-    packet[80] = c;    
+    packet[80] = c;
     esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
     esp_wifi_80211_tx(WIFI_IF_AP, packet, LEN_802_11, false);
     delay(1);
@@ -91,8 +91,8 @@ static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
   char tmpstr[30] = {0};
   sprintf(tmpstr, "appended checksum while bbp tx: 0x%02x\n", checksum);
   Serial.print(tmpstr);
-  #endif 
-  
+  #endif
+
   Serial.write(checksum);
 
   return (i+3);
@@ -146,13 +146,13 @@ static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
   } else {
       leds[0] = CRGB::Black;
   }
-  FastLED.show(); 
+  FastLED.show();
 }
 
 // rx: parse UART bytes to from a packet by switching state machines
 uint8_t databuf[ESP_MAX_LEN] = {0};
 void esp_parse(uint8_t c) {
-  
+
   static uint8_t byte_ctr = 0;
   static uint8_t drone_id = 0;
   static uint8_t packet_length = 0;
@@ -195,12 +195,12 @@ void esp_parse(uint8_t c) {
         packet_length = c;
         byte_ctr = byte_ctr + 1;
 
-        // info frame populated!! 
+        // info frame populated!!
         // printf("[uart] packet_length: %d, packet_type: %d, drone_id: %d\n", packet_length, packet_type, drone_id);
 
         if (packet_type == ACK_FRAME && packet_length == 4) {
-          // TODO: esp received ssid change signal and sent you ack, 
-          // indicate that on bool pprz esp ping? 
+          // TODO: esp received sid change signal and sent you ack,
+          // indicate that on bool pprz esp ping?
           esp_state = ESP_RX_OK;
           byte_ctr = 0;
         }
@@ -213,11 +213,10 @@ void esp_parse(uint8_t c) {
           esp_state = ESP_RX_ERR;
         }	else {
           // do nothing?!
-        } 
+        }
       } else {
         // do nothing?!
       }
-      
     } break;
 
     case ESP_DRONE_DATA: {
@@ -229,7 +228,7 @@ void esp_parse(uint8_t c) {
         databuf[byte_ctr - st_byte_pos] = c;
 
         checksum += databuf[byte_ctr - st_byte_pos];
-        
+
         byte_ctr = byte_ctr + 1;
       }
 
@@ -257,7 +256,7 @@ void esp_parse(uint8_t c) {
       // for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
       //   sprintf(tmstr1, "[uart] ESP_RX_OK: 0x%02x\n", databuf[ct]);
       //   Serial.println(tmstr1);
-      // }      
+      // }
       #endif
 
       /* checksum matches, proceed to populate the struct */
@@ -274,7 +273,7 @@ void esp_parse(uint8_t c) {
       memcpy(&packet[39], &infobuf, sizeof(drone_info_t));
       // write into 802.11 packet ssid data
       memcpy(&packet[42], &databuf, sizeof(drone_data_t));
-      
+
       // broadcastSSID();
 
       checksum = 0;
@@ -288,7 +287,7 @@ void esp_parse(uint8_t c) {
             char tmstr2[50] = {0};
             sprintf(tmstr2, "[uart] ESP_RX_ERR\n");
             Serial.println(tmstr2);
-            #endif 
+            #endif
             serial_flush();
             byte_ctr = 0;
             checksum = 0;
@@ -314,9 +313,9 @@ void esp_parse(uint8_t c) {
 }
 
 void setup() {
-  // reset uart state machine 
+  // reset uart state machine
   esp_state = ESP_SYNC;
-  
+
   Serial.begin(115200);
   Serial.setTimeout(100);
   WiFi.mode(WIFI_AP_STA);
@@ -327,8 +326,8 @@ void setup() {
   esp_wifi_set_max_tx_power(78);
 
   // Select external antenna
-  pinMode(21, OUTPUT);
-  digitalWrite(21, HIGH);
+  // pinMode(21, OUTPUT);
+  // digitalWrite(21, HIGH);
 
   // Init RGB LED
   FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
@@ -337,7 +336,7 @@ void setup() {
   FastLED.show();
 
   clear_drone_status();
-  delay(1000);  
+  delay(1000);
 
   // Serial.println("DEVICE: " + DEVCHAR);
 }
@@ -349,13 +348,13 @@ void loop() {
     char incomingByte = Serial.read();
     esp_parse((uint8_t) incomingByte);
   }
-      
+
   int r = random(0, 9999);
 
   //50Tx,50Rx
   if (r < 6667) {
     broadcastSSID();
-  } 
+  }
   else {
     scan(channel, 60); //S
   }

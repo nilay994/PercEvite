@@ -38,3 +38,24 @@ static void tx_struct(uart_packet_t *uart_packet) {
   esp_send_string(tx_string, sizeof(uart_packet_t));
   
 }
+
+
+drone_info_t infostruct = {
+  .drone_id = 25,
+  .packet_type = 2,
+  .packet_length = 32,
+};
+
+drone_data_t datastruct = {
+  .pos = {
+    .x = 1.0,
+    .y = -346.234,
+    .z = 23455.234,
+  },
+  .heading = -452.12,
+  .vel = {
+    .x = -1.53,
+    .y = -346.234,
+    .z = 23455.234,
+  }
+};
