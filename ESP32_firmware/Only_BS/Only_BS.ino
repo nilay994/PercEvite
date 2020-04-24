@@ -3,7 +3,7 @@
 #include "Only_BS.h"
 #include "wsled.h"
 
-// #define DBG
+#define DBG
 
 drone_data_t dr_data[MAX_DRONES];
 uint8_t esp_state = ESP_SYNC;
@@ -18,12 +18,12 @@ wifi_scan_config_t config;
 
 void random_mac() {
   // Randomize SRC MAC
-  // packet[10] = packet[16] = random(256);
-  // packet[11] = packet[17] = random(256);
-  // packet[12] = packet[18] = random(256);
-  // packet[13] = packet[19] = random(256);
-  // packet[14] = packet[20] = random(256);
-  // packet[15] = packet[21] = random(256);
+  packet[10] = packet[16] = random(256);
+  packet[11] = packet[17] = random(256);
+  packet[12] = packet[18] = random(256);
+  packet[13] = packet[19] = random(256);
+  packet[14] = packet[20] = random(256);
+  packet[15] = packet[21] = random(256);
 }
 
 void scan(uint8_t ch, uint8_t Ts) {
@@ -48,49 +48,23 @@ void scan(uint8_t ch, uint8_t Ts) {
     }
     #endif
 
-    /* print other drones location but with $ appended and CR/LN at the end of packet */
+    /* print other drones location but with $ appended and CR/LN at the end of packet */ 
     if (ssidstr[0] == '$') {
       esp_send_string(&ssidstr[1], sizeof(uart_packet_t));
     }
   }
 }
 
-drone_info_t infostruct = {
-  .drone_id = 25,
-  .packet_type = 2,
-  .packet_length = 32,
-};
-
-drone_data_t datastruct = {
-  .pos = {
-    .x = 1.0,
-    .y = -346.234,
-    .z = 23455.234,
-  },
-  .heading = -452.12,
-  .vel = {
-    .x = -1.53,
-    .y = -346.234,
-    .z = 23455.234,
-  }
-};
-
 // make this my ssid, can only be 32B long
 void broadcastSSID() {
   // fixed header "$"
   random_mac();
 
-  memcpy(&packet[39], &infostruct, sizeof(drone_info_t));
-  memcpy(&packet[42], &datastruct, sizeof(drone_data_t));
-
-  for (int c = 1; c < 15; c++) {
-    packet[80] = c;
-    esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
+    packet[80] = 4;
+    esp_wifi_set_channel(4, WIFI_SECOND_CHAN_NONE);
     esp_wifi_80211_tx(WIFI_IF_AP, packet, LEN_802_11, false);
-    delay(1);
-  } //14 channels
+
   delay(8);
-  datastruct.pos.x += 1.0;
 }
 
 // tx: send the ssid hex array to bebop after "$-ssid" was found in AP scan
@@ -295,9 +269,9 @@ void esp_parse(uint8_t c) {
       memcpy(&infobuf, &info, sizeof(drone_info_t));
 
       // write into 802.11 packet ssid info
-      // memcpy(&packet[39], &infobuf, sizeof(drone_info_t));
+      memcpy(&packet[39], &infobuf, sizeof(drone_info_t));
       // write into 802.11 packet ssid data
-      // memcpy(&packet[42], &databuf, sizeof(drone_data_t));
+      memcpy(&packet[42], &databuf, sizeof(drone_data_t));
 
       // broadcastSSID();
 
