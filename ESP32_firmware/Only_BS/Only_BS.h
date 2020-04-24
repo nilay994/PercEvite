@@ -7,14 +7,12 @@ extern "C" {
 
 #define SELF_ID 2
 #define ESP_MAX_LEN 50 // lat,long,alt,bearing = 51 bytes max (28 currently)
-#define MAX_DRONES 5  // maximum drones in ESP32's range
 #define LEN_802_11 83
 
 typedef enum {
   ACK_FRAME = 0,
   DATA_FRAME
 } frame_type_t;
-
 
 // decoder state
 typedef enum {
@@ -29,13 +27,12 @@ typedef enum {
 typedef struct __attribute__((packed)) {
   float x;
   float y;
-  float z;
-} vec3f_t;
+} vec2f_t;
 
 typedef struct __attribute__((packed)) {
-  vec3f_t pos;
+  vec2f_t pos;
   float heading;
-  vec3f_t vel;
+  float vel;
 } drone_data_t;
 
 typedef struct __attribute__((packed)) {
@@ -45,13 +42,13 @@ typedef struct __attribute__((packed)) {
 } drone_info_t;
 
 // encapsulated in $ and * 
-typedef struct __attribute__((packed)){
+typedef struct __attribute__((packed)) {
   drone_info_t info; 
   drone_data_t data;
 } uart_packet_t;
 
 // Beacon Packet buffer
-uint8_t packet[LEN_802_11] = { 0x80, 0x00, 0x00, 0x00,
+uint8_t packet802[LEN_802_11] = { 0x80, 0x00, 0x00, 0x00,
                      /*Destination MAC*/
                      /*4*/ 0xff, 0xff, 0xff, 0xff,
                      /*8*/ 0xff, 0xff,
@@ -68,7 +65,7 @@ uint8_t packet[LEN_802_11] = { 0x80, 0x00, 0x00, 0x00,
                      /*34*/0x01, 0x04,/*Capability info*/
                      /* SSID=ELEMENT ID> length> 28 bytes*/
                      /*36*/0x00, 32,
-                     /*38*/'$', 'D', SELF_ID, 'E', 
+                     /*38*/'$', 178, SELF_ID, 'E', 
                      /*42*/ 'S', 'P', 'M', 'A',
                      /*46*/'V', 'L', 'A', 'B',
                      /*50*/'*', '*', '*', '*',

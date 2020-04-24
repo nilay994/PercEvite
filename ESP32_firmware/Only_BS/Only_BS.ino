@@ -4,26 +4,18 @@
 #include "wsled.h"
 
 // #define DBG
-
-drone_data_t dr_data[MAX_DRONES];
 uint8_t esp_state = ESP_SYNC;
 uint8_t channel = 0;
-
-// scan the 10 (strongest) access points
-#define DEFAULT_SCAN_LIST_SIZE 10
-uint16_t number = DEFAULT_SCAN_LIST_SIZE;
-wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 char ssidsdk[32] = {0};
-wifi_scan_config_t config;
 
 void random_mac() {
   // Randomize SRC MAC
-  packet[10] = packet[16] = random(256);
-  packet[11] = packet[17] = random(256);
-  packet[12] = packet[18] = random(256);
-  packet[13] = packet[19] = random(256);
-  packet[14] = packet[20] = random(256);
-  packet[15] = packet[21] = random(256);
+  packet802[10] = packet802[16] = random(256);
+  packet802[11] = packet802[17] = random(256);
+  packet802[12] = packet802[18] = random(256);
+  packet802[13] = packet802[19] = random(256);
+  packet802[14] = packet802[20] = random(256);
+  packet802[15] = packet802[21] = random(256);
 }
 
 void scan(uint8_t ch, uint8_t Ts) {
@@ -38,7 +30,6 @@ void scan(uint8_t ch, uint8_t Ts) {
     // BUG! suspecting wifi.ssid terminating when ssid char = 0x00
     // Hacky patch applied @ .arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/WiFi/src
     // switch to esp-idf please!! And force promiscuous mode!!
-
     WiFi.SSID(j, ssidstr);
     #ifdef DBG
     Serial.print(j);
@@ -49,8 +40,8 @@ void scan(uint8_t ch, uint8_t Ts) {
     #endif
 
     /* print other drones location but with $ appended and CR/LN at the end of packet */
-    if (ssidstr[0] == '$') {
-      esp_send_string(&ssidstr[1], sizeof(uart_packet_t));
+    if (ssidstr[0] == '$' && ssidstr[1] == 178) {
+      send_to_bebop(&ssidstr[2], sizeof(uart_packet_t));
     }
   }
 }
@@ -60,16 +51,16 @@ void broadcastSSID() {
   // fixed header "$"
   random_mac();
   for (int c = 1; c < 15; c++) {
-    packet[80] = c;
+    packet802[80] = c;
     esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_80211_tx(WIFI_IF_AP, packet, LEN_802_11, false);
+    esp_wifi_80211_tx(WIFI_IF_AP, packet802, LEN_802_11, false);
     delay(1);
   } //14 channels
   delay(8);
 }
 
 // tx: send the ssid hex array to bebop after "$-ssid" was found in AP scan
-static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
+static uint8_t send_to_bebop(uint8_t *s, uint8_t len) {
 
   // augment start bytes
   Serial.write('$');
@@ -81,84 +72,63 @@ static uint8_t esp_send_string(uint8_t *s, uint8_t len) {
   uint8_t i = 0;
   for (i = 0; i < len; i ++) {
     Serial.write(s[i]);
-    
-    // TODO: remove when full checksum
-    if (i > 2) {
-      checksum += s[i];
-    }
+    checksum += s[i];
   }
+  Serial.write(checksum);
+
   #ifdef DBG
   char tmpstr[30] = {0};
   sprintf(tmpstr, "appended checksum while bbp tx: 0x%02x\n", checksum);
   Serial.print(tmpstr);
   #endif
 
-  Serial.write(checksum);
-
   return (i+3);
-}
-
-// init: clear all data for all drones
-static void clear_drone_status(void) {
-  for (uint8_t id = 0; id < MAX_DRONES; id++) {
-    // initialize at tropical waters of eastern Altanic ocean, facing the artic
-    dr_data[id].pos.x = 0;
-    dr_data[id].pos.y = 0;
-    dr_data[id].pos.z = 0;
-    dr_data[id].heading = 0;
-    dr_data[id].vel.x = 0;
-    dr_data[id].vel.y = 0;
-    dr_data[id].vel.z = 0;
-  }
 }
 
 // rx: in debug mode: print struct received after checksum match
 static void print_drone_data_struct(drone_data_t *dat) {
-  char tmpstr[200] = {0};
-	sprintf(tmpstr, "dat->pos.x: %f, dat->pos.y: %f, dat->pos.z: %f\n"
-				 "dat->heading: %f\n"
-				 "dat->vel.x: %f, dat->vel.y: %f, dat->vel.z: %f\n",
-					dat->pos.x, dat->pos.y,	dat->pos.z,
-					dat->heading,
-					dat->vel.x,	dat->vel.y, dat->vel.z);
-  Serial.println(tmpstr);
+
 }
 
 /* absolutely needed for now, TODO: maybe software flow control instead?! */
 void serial_flush() {
   while(Serial.available() > 0) {
-    char t = Serial.read();
+    char wipe = Serial.read();
   }
 }
 
-// rx: receive drone_data struct from the string that was received from UART
-static void rx_struct(drone_data_t *dr_dat, uint8_t* buf) {
-	memcpy(dr_dat, buf, sizeof(drone_data_t));
-  serial_flush();
-	#ifdef DBG
-	print_drone_data_struct(dr_dat);
-  #endif
-  // rx_success indicate
+// rx: success indication
+static void string_to_struct(uint8_t* buf) {
+
   static bool toggle = 0;
   toggle = !toggle;
   if (toggle) {
-      leds[0] = CRGB::Red;
+    leds[0] = CRGB::Red;
   } else {
-      leds[0] = CRGB::Black;
+    leds[0] = CRGB::Black;
   }
   FastLED.show();
+
+  drone_data_t dr_dat = {0};
+	memcpy(&dr_dat, buf, sizeof(drone_data_t));
+  #ifdef DBG
+	char tmpstr[200] = {0};
+	sprintf(tmpstr, "dat.pos.x: %f, dat.pos.y: %f, dat.heading: %f, dat.vel: %f\n",
+					dr_dat.pos.x, dr_dat.pos.y,	dr_dat.heading,	dr_dat.vel);
+  Serial.println(tmpstr);
+  #endif
+
 }
 
 // rx: parse UART bytes to from a packet by switching state machines
 uint8_t databuf[ESP_MAX_LEN] = {0};
-void esp_parse(uint8_t c) {
-
-  static uint8_t byte_ctr = 0;
-  static uint8_t drone_id = 0;
+void parse_received_from_bebop(uint8_t c) {
+  static uint8_t byte_ctr      = 0;
+  static uint8_t drone_id      = 0;
   static uint8_t packet_length = 0;
-  static uint8_t packet_type = 0;
-  static uint8_t checksum = 0;
-  static uint8_t prev_char = 0;
+  static uint8_t packet_type   = 0;
+  static uint8_t checksum      = 0;
+  static uint8_t prev_char     = 0;
 
   #ifdef DBG
   char tmstr[40] = {0};
@@ -183,7 +153,7 @@ void esp_parse(uint8_t c) {
 
     case ESP_DRONE_INFO: {
       if (byte_ctr == 2) {
-        /* take note of packet length */
+        /* take note of drone id */
         drone_id = c;
         byte_ctr = byte_ctr + 1;
       } else if (byte_ctr == 3) {
@@ -191,12 +161,9 @@ void esp_parse(uint8_t c) {
         packet_type = c;
         byte_ctr = byte_ctr + 1;
       } else if (byte_ctr == 4) {
-        /* take note of drone ID */
+        /* take note of packet length */
         packet_length = c;
         byte_ctr = byte_ctr + 1;
-
-        // info frame populated!!
-        // printf("[uart] packet_length: %d, packet_type: %d, drone_id: %d\n", packet_length, packet_type, drone_id);
 
         if (packet_type == ACK_FRAME && packet_length == 4) {
           // TODO: esp received sid change signal and sent you ack,
@@ -206,9 +173,11 @@ void esp_parse(uint8_t c) {
         }
 
         /* packet length will always be shorter than padded struct, create some leeway */
-        else if ((packet_type == DATA_FRAME) && (packet_length >= (sizeof(drone_data_t)-5))) {
-          esp_state = ESP_DRONE_DATA;
-        } else if (packet_length > ESP_MAX_LEN) {
+        else if ((packet_type == DATA_FRAME) && (packet_length >= (sizeof(drone_data_t) + sizeof(drone_info_t)))) {
+					// overwrite old checksum, start afresh
+					checksum = drone_id + packet_type + packet_length;
+					esp_state = ESP_DRONE_DATA;
+				} else if (packet_length > ESP_MAX_LEN) {
           // printf("[uart-err] Packet unexpectedly long \n");
           esp_state = ESP_RX_ERR;
         }	else {
@@ -220,15 +189,12 @@ void esp_parse(uint8_t c) {
     } break;
 
     case ESP_DRONE_DATA: {
-      // TODO: remove when full checksum
-      uint8_t st_byte_pos = 5;
+      const uint8_t st_byte_pos = sizeof(drone_info_t) + 2;
 
       if (byte_ctr < packet_length) {
-        /* fill a localbuf and calculate local checksum */
+        /* fill a databuf from zero and calculate data+info checksum */
         databuf[byte_ctr - st_byte_pos] = c;
-
         checksum += databuf[byte_ctr - st_byte_pos];
-
         byte_ctr = byte_ctr + 1;
       }
 
@@ -240,7 +206,7 @@ void esp_parse(uint8_t c) {
     } break;
 
     case ESP_ERR_CHK: {
-      /* check if last packet matches your checksum */
+      /* take in the last byte and check if it matches data+info checksum */
       if (c == checksum) {
         // printf("[uart] checksum matched!\n");
         esp_state = ESP_RX_OK;
@@ -251,6 +217,7 @@ void esp_parse(uint8_t c) {
     } // no break statement required;
 
     case ESP_RX_OK: {
+
       #ifdef DBG
       // char tmstr1[50] = {0};
       // for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
@@ -259,8 +226,12 @@ void esp_parse(uint8_t c) {
       // }
       #endif
 
-      /* checksum matches, proceed to populate the struct */
-      rx_struct(&dr_data[drone_id], databuf);
+      /* checksum matches, proceed to formulate 802.11 packet */
+      serial_flush();
+
+      /* debug via LED and DBG prints */
+      string_to_struct(databuf);
+      
       drone_info_t info = {
         .drone_id = drone_id,
         .packet_type = packet_type,
@@ -270,12 +241,11 @@ void esp_parse(uint8_t c) {
       memcpy(&infobuf, &info, sizeof(drone_info_t));
 
       // write into 802.11 packet ssid info
-      memcpy(&packet[39], &infobuf, sizeof(drone_info_t));
+      memcpy(&packet802[40], &infobuf, sizeof(drone_info_t));
       // write into 802.11 packet ssid data
-      memcpy(&packet[42], &databuf, sizeof(drone_data_t));
+      memcpy(&packet802[43], &databuf, sizeof(drone_data_t));
 
-      // broadcastSSID();
-
+      /* now ready for broadcastSSID() after writing to packet */
       checksum = 0;
 
       /* reset state machine */
@@ -331,11 +301,10 @@ void setup() {
 
   // Init RGB LED
   FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(32);
+  FastLED.setBrightness(50);
   leds[0] = CRGB::Green;
   FastLED.show();
 
-  clear_drone_status();
   delay(1000);
 
   // Serial.println("DEVICE: " + DEVCHAR);
@@ -343,10 +312,10 @@ void setup() {
 
 void loop() {
 
-  // rx: state machine
+  // rx: state machine received characters from bebop
   if (Serial.available() > 0) {
     char incomingByte = Serial.read();
-    esp_parse((uint8_t) incomingByte);
+    parse_received_from_bebop((uint8_t) incomingByte);
   }
 
   int r = random(0, 9999);
