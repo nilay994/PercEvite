@@ -11,7 +11,8 @@ extern "C" {
 
 typedef enum {
   ACK_FRAME = 0,
-  DATA_FRAME
+  DATA_FRAME,
+  COLOR_FRAME
 } frame_type_t;
 
 // decoder state
@@ -40,6 +41,12 @@ typedef struct __attribute__((packed)) {
   uint8_t packet_type;
   uint8_t packet_length;
 } drone_info_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+} drone_color_t;
 
 // encapsulated in $ and * 
 typedef struct __attribute__((packed)) {

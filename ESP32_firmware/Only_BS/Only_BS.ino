@@ -173,9 +173,14 @@ void parse_received_from_bebop(uint8_t c) {
         }
 
         /* packet length will always be shorter than padded struct, create some leeway */
-        else if ((packet_type == DATA_FRAME) && (packet_length >= (sizeof(drone_data_t) + sizeof(drone_info_t)))) {
+        else if ((packet_type == DATA_FRAME || packet_type == COLOR_FRAME) && (packet_length >= (sizeof(drone_info_t) + sizeof(drone_color_t)))) {
 					// overwrite old checksum, start afresh
 					checksum = drone_id + packet_type + packet_length;
+          #ifdef DBG
+          char checksumstr[40] = {0};
+          sprintf(checksumstr, "cs: 0x%02x\n", checksum);
+          Serial.println(checksumstr);
+          #endif
 					esp_state = ESP_DRONE_DATA;
 				} else if (packet_length > ESP_MAX_LEN) {
           // printf("[uart-err] Packet unexpectedly long \n");
@@ -228,22 +233,32 @@ void parse_received_from_bebop(uint8_t c) {
 
       /* checksum matches, proceed to formulate 802.11 packet */
       serial_flush();
+      if (packet_type == DATA_FRAME) {
+        /* debug via LED and DBG prints */
+        string_to_struct(databuf);
+        
+        drone_info_t info = {
+          .drone_id = drone_id,
+          .packet_type = packet_type,
+          .packet_length = packet_length,
+        };
+        uint8_t infobuf[3] = {0};
+        memcpy(&infobuf, &info, sizeof(drone_info_t));
 
-      /* debug via LED and DBG prints */
-      string_to_struct(databuf);
-      
-      drone_info_t info = {
-        .drone_id = drone_id,
-        .packet_type = packet_type,
-        .packet_length = packet_length,
-      };
-      uint8_t infobuf[3] = {0};
-      memcpy(&infobuf, &info, sizeof(drone_info_t));
+        // write into 802.11 packet ssid info
+        memcpy(&packet802[40], &infobuf, sizeof(drone_info_t));
+        // write into 802.11 packet ssid data
+        memcpy(&packet802[43], &databuf, sizeof(drone_data_t));
+      }
 
-      // write into 802.11 packet ssid info
-      memcpy(&packet802[40], &infobuf, sizeof(drone_info_t));
-      // write into 802.11 packet ssid data
-      memcpy(&packet802[43], &databuf, sizeof(drone_data_t));
+      if (packet_type == COLOR_FRAME) {
+        drone_color_t drone_color;
+        memcpy(&drone_color, &databuf, sizeof(drone_color_t));
+        leds[0].r = drone_color.r;
+        leds[0].g = drone_color.g;
+        leds[0].b = drone_color.b;
+        FastLED.show();
+      }
 
       /* now ready for broadcastSSID() after writing to packet */
       checksum = 0;
