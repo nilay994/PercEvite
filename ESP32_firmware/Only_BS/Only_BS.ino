@@ -332,7 +332,6 @@ void loop() {
     char incomingByte = Serial.read();
     parse_received_from_bebop((uint8_t) incomingByte);
   }
-
   int r = random(0, 9999);
 
   //50Tx,50Rx

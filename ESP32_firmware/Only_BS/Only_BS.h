@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define SELF_ID 2
+#define SELF_ID 1
 #define ESP_MAX_LEN 50 // lat,long,alt,bearing = 51 bytes max (28 currently)
 #define LEN_802_11 83
 
@@ -32,8 +32,7 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
   vec2f_t pos;
-  float heading;
-  float vel;
+  vec2f_t vel;
 } drone_data_t;
 
 typedef struct __attribute__((packed)) {
