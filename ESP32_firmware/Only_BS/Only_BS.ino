@@ -18,6 +18,7 @@ void random_mac() {
   packet802[15] = packet802[21] = random(256);
 }
 
+
 void scan(uint8_t ch, uint8_t Ts) {
   int numSsid = WiFi.scanNetworks(false, true, true, Ts, ch);
 
@@ -32,62 +33,65 @@ void scan(uint8_t ch, uint8_t Ts) {
     // switch to esp-idf please!! And force promiscuous mode!!
     WiFi.SSID(j, ssidstr);
     #ifdef DBG
-    Serial.print(j);
-    Serial.print("->");
-    for (int iwer = 0; iwer < 32; iwer ++) {
-      Serial.print(ssidstr[iwer], HEX);
-    }
+      Serial.print(j);
+      Serial.print("->");
+      for (int iwer = 0; iwer < 32; iwer ++) {
+        Serial.print(ssidstr[iwer], HEX);
+      }
     #endif
 
     /* print other drones location but with $ appended and CR/LN at the end of packet */
     if (ssidstr[0] == '$' && ssidstr[1] == 178) {
-      send_to_bebop(&ssidstr[2], sizeof(uart_packet_t));
+      // rx: success indication
+      char tmpstr[150] = {0};
+      uart_packet_t dr_packet = {0};
+      send_scanned_ssid_to_bebop(&ssidstr[2], sizeof(uart_packet_t));
+      memcpy(&dr_packet, &ssidstr[2], sizeof(uart_packet_t));
+      sprintf(tmpstr, "[FROMSCAN] id: %d, pos.x: %f", dr_packet.info.drone_id, dr_packet.data.pos.x);
+      Serial.println(tmpstr);
     }
   }
 }
 
-// make this my ssid, can only be 32B long
-void broadcastSSID() {
-  // fixed header "$"
-  random_mac();
-  for (int c = 1; c < 15; c++) {
-    packet802[80] = c;
-    esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_80211_tx(WIFI_IF_AP, packet802, LEN_802_11, false);
-    delay(1);
-  } //14 channels
-  delay(8);
-}
-
 // tx: send the ssid hex array to bebop after "$-ssid" was found in AP scan
-static uint8_t send_to_bebop(uint8_t *s, uint8_t len) {
-
-  // augment start bytes
-  Serial.write('$');
-  Serial.write(178);
-
-  uint8_t checksum = 0;
-
-  // maximum of 255 bytes
-  uint8_t i = 0;
-  for (i = 0; i < len; i ++) {
-    Serial.write(s[i]);
-    checksum += s[i];
-  }
-  Serial.write(checksum);
-
-  #ifdef DBG
-  char tmpstr[30] = {0};
-  sprintf(tmpstr, "appended checksum while bbp tx: 0x%02x\n", checksum);
-  Serial.print(tmpstr);
+static void send_scanned_ssid_to_bebop(uint8_t *s, uint8_t len) {
+  #ifndef DBG
+    // augment start bytes
+    Serial.write('$');
+    Serial.write(178);
+  
+    uint8_t checksum = 0;
+  
+    // maximum of 255 bytes
+    uint8_t i = 0;
+    for (i = 0; i < len; i ++) {
+      Serial.write(s[i]);
+      checksum += s[i];
+    }
+    Serial.write(checksum);
   #endif
 
-  return (i+3);
+  #ifdef DBG
+    char tmpstr[30] = {0};
+    sprintf(tmpstr, "appended checksum while bbp tx: 0x%02x\n", checksum);
+    Serial.print(tmpstr);
+  #endif
+
+  led_debug(FROM_SCAN);
 }
 
-// rx: in debug mode: print struct received after checksum match
-static void print_drone_data_struct(drone_data_t *dat) {
-
+static void led_debug(bool src) {
+  // LED Debug
+  static bool toggle = 0;
+  toggle = !toggle;
+  if (toggle && src) {
+    leds[0] = CRGB::Red;
+  } else if (toggle && !src) {
+    leds[0] = CRGB::Blue;
+  } else {
+    leds[0] = CRGB::Black;
+  }
+  FastLED.show();
 }
 
 /* absolutely needed for now, TODO: maybe software flow control instead?! */
@@ -95,29 +99,6 @@ void serial_flush() {
   while(Serial.available() > 0) {
     char wipe = Serial.read();
   }
-}
-
-// rx: success indication
-static void string_to_struct(uint8_t* buf) {
-
-  static bool toggle = 0;
-  toggle = !toggle;
-  if (toggle) {
-    leds[0] = CRGB::Red;
-  } else {
-    leds[0] = CRGB::Black;
-  }
-  FastLED.show();
-
-  drone_data_t dr_dat = {0};
-	memcpy(&dr_dat, buf, sizeof(drone_data_t));
-  #ifdef DBG
-	char tmpstr[200] = {0};
-	sprintf(tmpstr, "dat.pos.x: %f, dat.pos.y: %f, dat.heading: %f, dat.vel: %f\n",
-					dr_dat.pos.x, dr_dat.pos.y,	dr_dat.heading,	dr_dat.vel);
-  Serial.println(tmpstr);
-  #endif
-
 }
 
 // rx: parse UART bytes to from a packet by switching state machines
@@ -131,9 +112,9 @@ void parse_received_from_bebop(uint8_t c) {
   static uint8_t prev_char     = 0;
 
   #ifdef DBG
-  char tmstr[40] = {0};
-  sprintf(tmstr, "esp_state: %d, char rxed: 0x%02x\n", esp_state, c);
-  Serial.println(tmstr);
+    char tmstr[40] = {0};
+    sprintf(tmstr, "esp_state: %d, char rxed: 0x%02x\n", esp_state, c);
+    Serial.println(tmstr);
   #endif
 
   switch (esp_state) {
@@ -177,9 +158,9 @@ void parse_received_from_bebop(uint8_t c) {
 					// overwrite old checksum, start afresh
 					checksum = drone_id + packet_type + packet_length;
           #ifdef DBG
-          char checksumstr[40] = {0};
-          sprintf(checksumstr, "cs: 0x%02x\n", checksum);
-          Serial.println(checksumstr);
+            char checksumstr[40] = {0};
+            sprintf(checksumstr, "cs: 0x%02x\n", checksum);
+            Serial.println(checksumstr);
           #endif
 					esp_state = ESP_DRONE_DATA;
 				} else if (packet_length > ESP_MAX_LEN) {
@@ -213,7 +194,6 @@ void parse_received_from_bebop(uint8_t c) {
     case ESP_ERR_CHK: {
       /* take in the last byte and check if it matches data+info checksum */
       if (c == checksum) {
-        // printf("[uart] checksum matched!\n");
         esp_state = ESP_RX_OK;
       }
       else {
@@ -223,32 +203,26 @@ void parse_received_from_bebop(uint8_t c) {
 
     case ESP_RX_OK: {
 
-      #ifdef DBG
-      // char tmstr1[50] = {0};
-      // for (int ct = 0; ct < sizeof(drone_data_t); ct++) {
-      //   sprintf(tmstr1, "[uart] ESP_RX_OK: 0x%02x\n", databuf[ct]);
-      //   Serial.println(tmstr1);
-      // }
-      #endif
-
       /* checksum matches, proceed to formulate 802.11 packet */
       serial_flush();
       if (packet_type == DATA_FRAME) {
-        /* debug via LED and DBG prints */
-        string_to_struct(databuf);
+
+        uint8_t uart_buf[3+16] = {0};
         
-        drone_info_t info = {
+        drone_info_t info_struct = {
           .drone_id = drone_id,
           .packet_type = packet_type,
           .packet_length = packet_length,
         };
-        uint8_t infobuf[3] = {0};
-        memcpy(&infobuf, &info, sizeof(drone_info_t));
 
-        // write into 802.11 packet ssid info
-        memcpy(&packet802[40], &infobuf, sizeof(drone_info_t));
-        // write into 802.11 packet ssid data
-        memcpy(&packet802[43], &databuf, sizeof(drone_data_t));
+        memcpy(&uart_buf, &info_struct, sizeof(drone_info_t));
+        memcpy(&uart_buf[3], &databuf, sizeof(drone_data_t));
+
+        /* debug via LED */
+        led_debug(FROM_BEBOP);
+
+        // write into 802.11 packet ssid info+data
+        memcpy(&packet802[40], &uart_buf, sizeof(uart_packet_t));
       }
 
       if (packet_type == COLOR_FRAME) {
@@ -268,22 +242,22 @@ void parse_received_from_bebop(uint8_t c) {
 
     } break;
     case ESP_RX_ERR: {
-            #ifdef DBG
-            char tmstr2[50] = {0};
-            sprintf(tmstr2, "[uart] ESP_RX_ERR\n");
-            Serial.println(tmstr2);
-            #endif
-            serial_flush();
-            byte_ctr = 0;
-            checksum = 0;
-            /* reset state machine, string terminated earlier than expected */
-            esp_state = ESP_SYNC;
+      #ifdef DBG
+        char tmstr2[50] = {0};
+        sprintf(tmstr2, "[uart] ESP_RX_ERR\n");
+        Serial.println(tmstr2);
+      #endif
+      serial_flush();
+      byte_ctr = 0;
+      checksum = 0;
+      /* reset state machine, string terminated earlier than expected */
+      esp_state = ESP_SYNC;
     } break;
     default: {
-            serial_flush();
-            byte_ctr = 0;
-            checksum = 0;
-            esp_state = ESP_SYNC;
+      serial_flush();
+      byte_ctr = 0;
+      checksum = 0;
+      esp_state = ESP_SYNC;
     } break;
   }
 
@@ -295,6 +269,19 @@ void parse_received_from_bebop(uint8_t c) {
 
   /* for start byte pattern check */
   prev_char = c;
+}
+
+// make this my ssid, can only be 32B long
+void broadcastSSID() {
+  // fixed header "$"
+  random_mac();
+  for (int c = 1; c < 15; c++) {
+    packet802[80] = c;
+    esp_wifi_set_channel(c, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_80211_tx(WIFI_IF_AP, packet802, LEN_802_11, false);
+    delay(1);
+  } //14 channels
+  delay(8);
 }
 
 void setup() {
@@ -321,21 +308,53 @@ void setup() {
   FastLED.show();
 
   delay(1000);
+}
 
-  // Serial.println("DEVICE: " + DEVCHAR);
+// invoked every half a second
+float ctr = 0.234;
+static void rate_loop() {
+
+  unsigned long curr_time = millis();
+  static unsigned long prev_time = curr_time;
+
+  if ((curr_time - prev_time) > 500) {
+    ctr = ctr + 0.513;
+    prev_time = curr_time;
+  }
 }
 
 void loop() {
 
   // rx: state machine received characters from bebop
-  if (Serial.available() > 0) {
-    char incomingByte = Serial.read();
-    parse_received_from_bebop((uint8_t) incomingByte);
-  }
+   if (Serial.available() > 0) {
+     char incomingByte = Serial.read();
+     parse_received_from_bebop((uint8_t) incomingByte);
+   }
   int r = random(0, 9999);
 
   //50Tx,50Rx
   if (r < 6667) {
+    rate_loop();
+    uart_packet_t uart_buf = {
+      .info = {
+        .drone_id = SELF_ID,
+        .packet_type = DATA_FRAME,
+        .packet_length = 0x15,
+      },
+      .data = {
+        .pos = {
+          .x = ctr,
+          .y = 0.234,
+        },
+        .vel = {
+          .x = ctr,
+          .y = 0.234,
+        },
+      }
+    };
+
+    // write into 802.11 packet ssid info+data
+    memcpy(&packet802[40], &uart_buf, sizeof(uart_packet_t));
     broadcastSSID();
   }
   else {

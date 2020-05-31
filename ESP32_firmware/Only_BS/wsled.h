@@ -15,5 +15,3 @@
 #include "FastLED.h"
 #define NUM_LEDS 1
 CRGB leds[NUM_LEDS];
-
-

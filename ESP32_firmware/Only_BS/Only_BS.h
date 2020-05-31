@@ -10,6 +10,11 @@ extern "C" {
 #define LEN_802_11 83
 
 typedef enum {
+  FROM_SCAN = 0,
+  FROM_BEBOP,
+} string_struct_type;
+
+typedef enum {
   ACK_FRAME = 0,
   DATA_FRAME,
   COLOR_FRAME
@@ -54,38 +59,37 @@ typedef struct __attribute__((packed)) {
 } uart_packet_t;
 
 // Beacon Packet buffer
-uint8_t packet802[LEN_802_11] = { 0x80, 0x00, 0x00, 0x00,
-                     /*Destination MAC*/
-                     /*4*/ 0xff, 0xff, 0xff, 0xff,
-                     /*8*/ 0xff, 0xff,
-                     /*Source MAC*/
-                     /*10*/0x01, 0x02, 0x03, 0x04,
-                     /*14*/0x05, 0x06,
-                     /*BSS ID*/
-                     /*16*/0x01, 0x02, 0x03, 0x04,
-                     /*20*/0x05, 0x06, 0xc0, 0x6c,
-                     /*Timestamp*/
-                     /*24*/0x83, 0x51, 0xf7, 0x8f,
-                     /*28*/0x0f, 0x00, 0x00, 0x00,
-                     /*32*/0x64, 0x00,/*Beacon interval*/
-                     /*34*/0x01, 0x04,/*Capability info*/
-                     /* SSID=ELEMENT ID> length> 28 bytes*/
-                     /*36*/0x00, 32,
-                     /*38*/'$', 178, SELF_ID, 'E', 
-                     /*42*/ 'S', 'P', 'M', 'A',
-                     /*46*/'V', 'L', 'A', 'B',
-                     /*50*/'*', '*', '*', '*',
-                     /*54*/'*', '*', '*', '*',
-                     /*58*/'*', '*', '*', '*',
-                     /*62*/'*', '*', '*', '*',
-                     /*66*/'*', '*', '*', '*',
-                     /*Supported rates*/
-                     /*70*/0x01, 0x08, 0x82, 0x84,
-                     /*74*/0x8b, 0x96, 0x24, 0x30,
-                     /*80*/0x48, 0x6c, 0x03, 0x01,
-                     /*81*/0x04
-                   };
-
+uint8_t packet802[LEN_802_11] = { 
+       0x80, 0x00, 0x00, 0x00,
+ /*Destination MAC*/
+ /*4*/ 0xff, 0xff, 0xff, 0xff,
+ /*8*/ 0xff, 0xff,
+ /*Source MAC*/
+ /*10*/0x01, 0x02, 0x03, 0x04,
+ /*14*/0x05, 0x06,
+ /*BSS ID*/
+ /*16*/0x01, 0x02, 0x03, 0x04,
+ /*20*/0x05, 0x06, 0xc0, 0x6c,
+ /*Timestamp*/
+ /*24*/0x83, 0x51, 0xf7, 0x8f,
+ /*28*/0x0f, 0x00, 0x00, 0x00,
+ /*32*/0x64, 0x00,/*Beacon interval*/
+ /*34*/0x01, 0x04,/*Capability info*/
+ /* SSID=ELEMENT ID> length> 28 bytes*/
+ /*36*/0x00, 32,
+ /*38*/'$', 178, SELF_ID, 'E', 
+ /*42*/ 'S', 'P', 'M', 'A',
+ /*46*/'V', 'L', 'A', 'B',
+ /*50*/'*', '*', '*', '*',
+ /*54*/'*', '*', '*', '*',
+ /*58*/'*', '*', '*', '*',
+ /*62*/'*', '*', '*', '*',
+ /*66*/'*', '*', '*', '*',
+ /*Supported rates*/
+ /*70*/0x01, 0x08, 0x82, 0x84,
+ /*74*/0x8b, 0x96, 0x24, 0x30,
+ /*80*/0x48, 0x6c, 0x03, 0x01,
+ /*81*/0x04};
 
 #ifdef __cplusplus
 } /* extern "C" */
