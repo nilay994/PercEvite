@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define SELF_ID 1
+#define SELF_ID 2
 #define ESP_MAX_LEN 50 // lat,long,alt,bearing = 51 bytes max (28 currently)
 #define LEN_802_11 83
 

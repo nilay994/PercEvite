@@ -55,7 +55,7 @@ void scan(uint8_t ch, uint8_t Ts) {
 
 // tx: send the ssid hex array to bebop after "$-ssid" was found in AP scan
 static void send_scanned_ssid_to_bebop(uint8_t *s, uint8_t len) {
-  #ifndef DBG
+  #ifdef BBP_SERIAL
     // augment start bytes
     Serial.write('$');
     Serial.write(178);
@@ -298,12 +298,12 @@ void setup() {
   esp_wifi_set_max_tx_power(78);
 
   // Select external antenna
-  // pinMode(21, OUTPUT);
-  // digitalWrite(21, HIGH);
+  //  pinMode(21, OUTPUT);
+  //  digitalWrite(21, HIGH);
 
   // Init RGB LED
   FastLED.addLeds<WS2812B, LED_WS2812B, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(50);
+  FastLED.setBrightness(180);
   leds[0] = CRGB::Green;
   FastLED.show();
 
